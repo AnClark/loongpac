@@ -3,6 +3,7 @@
 import re, subprocess, os
 
 CACHE_PKGBUILD_FILE_PATH = "/home/anclark/.cache/loongpac/pkgbuild/"
+REPO_PATH = "/home/anclark/.cache/loongpac/repo/"
 
 
 def init_cache_dir():
@@ -166,10 +167,22 @@ def populate_dependency_list(pkg_name):
     return dependency_table
 
 
-def generate_makefile(dependency_table):
+def generate_makefile(dependency_table, main_package=""):
     MAKEFILE_TARGET_TEMPLATE = """
 {name}: {depends}
-\t@echo "Will build target: {name}"
+\t@echo ">>> [ Build target: {name} ] <<<"
+\t
+\t@echo " >> Fetching {name}"
+\t@if [ ! -e $(REPO_PATH)/{name} -o ! -e $(REPO_PATH)/{name}/PKGBUILD ]; then \\
+\t\tcd $(REPO_PATH); \\
+\t\trm -rf {name};\\
+\t\tasp export {name}; \\
+\tfi
+\t
+\t@echo " >> Building {name}"
+\t@cd $(REPO_PATH)/{name}; \\
+\t\trm -rf src pkg *.tar.zst
+\t@cd $(REPO_PATH)/{name} && makepkg -f --skippgpcheck
 """
     # Template to process packages with alias(es) ("PKG1 is part of PKG2")
     MAKEFILE_TARGET_TEMPLATE_ALIAS = """
@@ -182,7 +195,15 @@ def generate_makefile(dependency_table):
 \t@echo "{alias} is provided by: {providers}"
 """
 
-    makefile_content = ""
+    makefile_content = """
+REPO_PATH := {repo_path}
+
+all: prepare {main_pkg}
+
+prepare:
+\tmkdir -p $(REPO_PATH)
+\tasp set-git-protocol git
+""".format(repo_path=REPO_PATH, main_pkg=main_package)
 
     def list_to_string(list):
         out = ""
